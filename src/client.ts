@@ -591,11 +591,26 @@ export class Client {
           info = { ...info, channelID: current.channelID };
           this.#clients.set(info.id, info);
         }
-        if (info.id !== 0 && isAutoNicknameMatch(this.nickname, info.nickname)) {
+        // Our own notifycliententerview is the last event in the TS3/TS5
+        // welcome sequence. It confirms command-response buffering may start
+        // and — when the server renamed us over a nickname collision —
+        // carries the assigned nickname. Identify self by the clid initserver
+        // already assigned; never by nickname. A clientEnter from any other
+        // client named "<our nick><digits>" (that client's own collision
+        // rename) used to hijack this.clid, poisoning every outgoing packet
+        // header with a foreign clientID until the server dropped the
+        // connection for command-resend timeout.
+        if (info.id !== 0 && info.id === this.clid) {
+          this.nickname = info.nickname;
+          this.#cmdTrack.signalWelcomeComplete();
+        } else if (info.id !== 0 && this.clid === 0 && isAutoNicknameMatch(this.nickname, info.nickname)) {
+          // initserver without aclid: the welcome enter is the only way to
+          // learn our clid. Gate the nickname match on the clid being unknown
+          // so a later "<our nick><digits>" client can never hijack an
+          // established session.
           this.clid = info.id;
           this.handler.setClientID(info.id);
-          // Our own notifycliententerview is the last event in the TS3/TS5
-          // welcome sequence. Signal that it's safe to buffer command responses.
+          this.nickname = info.nickname;
           this.#cmdTrack.signalWelcomeComplete();
         }
         this.#dispatchEvent("clientEnter", info);

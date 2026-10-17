@@ -61,8 +61,6 @@ export interface DirectoryClientInfo extends ClientInfo {
   inputMuted?: boolean;
   outputMuted?: boolean;
   channelCommander?: boolean;
-  /** Present only in notifications that carried the flag (absent = unchanged). */
-  avatarFlag?: boolean;
 }
 
 /** The channel tree and visible clients maintained by a connected session. */

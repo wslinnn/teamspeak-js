@@ -206,36 +206,3 @@ describe("handleNotification", () => {
     });
   });
 });
-
-describe('notifyclientupdated avatar flag', () => {
-  const baseClients = () => new Map<number, DirectoryClientInfo>([
-    [7, { id: 7, nickname: 'Alice', uid: 'uid123', channelID: 42n, type: 0, serverGroups: [], inputMuted: false, outputMuted: false }],
-  ]);
-
-  it('surfaces client_flag_avatar when the notification carries it', () => {
-    const clients = baseClients();
-    const withFlag = handleNotification(
-      { name: 'notifyclientupdated', params: { clid: '7', client_flag_avatar: '1' } },
-      1,
-      clients,
-      'Bot',
-    );
-    expect(withFlag.kind).toBe('clientUpdated');
-    if (withFlag.kind !== 'clientUpdated') return;
-    expect(withFlag.event.info.avatarFlag).toBe(true);
-    // 簿记语义：缺席字段 = 未变化，flag 保留到后续通知。
-    expect(clients.get(7)?.avatarFlag).toBe(true);
-  });
-
-  it('leaves avatarFlag absent when the notification does not carry it', () => {
-    const withoutFlag = handleNotification(
-      { name: 'notifyclientupdated', params: { clid: '7', client_input_muted: '0' } },
-      1,
-      baseClients(),
-      'Bot',
-    );
-    expect(withoutFlag.kind).toBe('clientUpdated');
-    if (withoutFlag.kind !== 'clientUpdated') return;
-    expect(withoutFlag.event.info.avatarFlag).toBeUndefined();
-  });
-});

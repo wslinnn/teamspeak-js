@@ -74,14 +74,6 @@ export class Client {
   /** @internal */ logger: Logger;
   /** @internal */ nickname: string;
   /** @internal */ clid = 0;
-  /** @internal */ serverHandshakeInfo: { name?: string; welcomeMessage?: string } | null = null;
-
-  /** Server identity captured from the `initserver` connect handshake.
-   *  Permission-free (the `serverinfo` command needs
-   *  b_virtualserver_info_view); absent fields were absent in the handshake. */
-  get serverHandshake(): { name?: string; welcomeMessage?: string } | null {
-    return this.serverHandshakeInfo;
-  }
 
   #identity: Identity;
   #addr: string;

@@ -178,12 +178,6 @@ function handleClientUpdated(
   if (cmd.params["client_input_muted"] !== undefined) info.inputMuted = cmd.params["client_input_muted"] === "1";
   if (cmd.params["client_output_muted"] !== undefined) info.outputMuted = cmd.params["client_output_muted"] === "1";
   if (cmd.params["client_is_channel_commander"] !== undefined) info.channelCommander = cmd.params["client_is_channel_commander"] === "1";
-  // Avatar flag: the official plugin SDK notes it is "automatically up-to-date
-  // for any client in view" — this notification is the only in-band signal a
-  // client gets when a member sets or removes their avatar. Field absent =
-  // unchanged (the server only sends changed variables).
-
-  if (cmd.params["client_flag_avatar"] !== undefined) info.avatarFlag = cmd.params["client_flag_avatar"] === "1";
 
   if (clid !== 0) clients.set(clid, info);
   return { kind: "clientUpdated", event: { info } };

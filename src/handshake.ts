@@ -41,19 +41,6 @@ export function handleInitServer(client: Client, params: Record<string, string>)
     client.handler.setClientID(clid);
   }
 
-  // `initserver` carries the virtualserver_* variable set as part of the
-  // connect handshake — permission-free for every client, unlike the
-  // `serverinfo` command (requires b_virtualserver_info_view). Keep the two
-  // fields the welcome card shows so integrations never need that permission.
-  const name = params["virtualserver_name"];
-  const welcomeMessage = params["virtualserver_welcomemessage"];
-  if (name !== undefined || welcomeMessage !== undefined) {
-    client.serverHandshakeInfo = {
-      ...(name !== undefined ? { name } : {}),
-      ...(welcomeMessage !== undefined ? { welcomeMessage } : {}),
-    };
-  }
-
   client.logger.info("connected to server", { selfId: client.clid });
   client._markConnected();
 

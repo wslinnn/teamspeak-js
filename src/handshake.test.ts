@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
 import { Client } from "./client.js";
 import { generateIdentity } from "./crypto/identity.js";
-import { sendClientInit } from "./handshake.js";
+import { handleInitServer, sendClientInit } from "./handshake.js";
 import { parseCommand } from "./command/parser.js";
 import { PacketType } from "./transport/packet.js";
 import type { ClientOptions } from "./types.js";
@@ -81,5 +81,36 @@ describe("sendClientInit", () => {
     expect(
       raw.indexOf(`client_server_password=${prepareClientPassword("server secret")}`),
     ).toBeLessThan(raw.indexOf("client_meta_data="));
+  });
+});
+
+describe("handleInitServer", () => {
+  function preparedClient() {
+    const client = new Client(generateIdentity(0), "localhost", "TS Bot");
+    client.handler.setClientID = () => {};
+    client.handler.sendPacket = (() => {}) as typeof client.handler.sendPacket;
+    client.logger.info = (() => {}) as typeof client.logger.info;
+    client._markConnected = () => {};
+    client.sendCommandNoWait = (async () => {}) as typeof client.sendCommandNoWait;
+    return client;
+  }
+
+  it("captures the permission-free virtualserver identity fields", () => {
+    const client = preparedClient();
+    handleInitServer(client, {
+      aclid: "7",
+      virtualserver_name: "FooBar",
+      virtualserver_welcomemessage: "hello there",
+    });
+
+    expect(client.clid).toBe(7);
+    expect(client.serverHandshake).toEqual({ name: "FooBar", welcomeMessage: "hello there" });
+  });
+
+  it("leaves the handshake info absent when the server omits the fields", () => {
+    const client = preparedClient();
+    handleInitServer(client, { aclid: "7" });
+
+    expect(client.serverHandshake).toBeNull();
   });
 });

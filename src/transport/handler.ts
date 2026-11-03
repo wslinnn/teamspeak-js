@@ -15,6 +15,7 @@ import {
 } from "./packet.js";
 import { GenerationWindow } from "./generation-window.js";
 import { Qlz } from "./quicklz.js";
+import { RttStats, VoiceTrailer, VOICE_TRAILER_FLAG } from "./voice-trailer.js";
 import { processInit1 } from "../handshake/crypt-handshake.js";
 
 const MAX_OUT_PACKET_SIZE = 500;
@@ -63,6 +64,9 @@ export class PacketHandler {
   #commandLowQueue = new Map<number, Packet>();
   #ackManager = new Map<number, ResendPacket>();
   #initPacketCheck: ResendPacket | null = null;
+  #rttStats = new RttStats();
+  #voiceTrailer = new VoiceTrailer(this.#rttStats);
+  #pendingPings = new Map<number, number>();
 
   constructor(crypt: Crypt, logger: Logger = noopLogger) {
     this.#crypt = crypt;
@@ -115,6 +119,14 @@ export class PacketHandler {
     // Ping loop
     const pingTimer = setInterval(() => {
       if (this.#crypt.cryptoInitComplete) {
+        // Remember the ping id before sendPacket assigns it: the pong payload
+        // echoes this id, which is how the RTT sample is matched.
+        const pingId = this.#packetCounter[PacketType.Ping]!;
+        this.#pendingPings.set(pingId, Date.now());
+        if (this.#pendingPings.size > 32) {
+          const oldest = this.#pendingPings.keys().next().value;
+          if (oldest !== undefined) this.#pendingPings.delete(oldest);
+        }
         this.sendPacket(PacketType.Ping, new Uint8Array(0), PacketFlags.Unencrypted);
       }
     }, PING_INTERVAL_MS);
@@ -146,14 +158,16 @@ export class PacketHandler {
       this.#generationCounter[PacketType.Voice]!++;
     }
 
-    const payloadLen = VOICE_HEADER_SIZE + data.length;
+    const trailer = this.#voiceTrailer.next();
+    const payloadLen = VOICE_HEADER_SIZE + data.length + (trailer === null ? 0 : 1);
     const voicePayload = new Uint8Array(payloadLen);
     new DataView(voicePayload.buffer).setUint16(0, pID, false);
     voicePayload[2] = codec;
     voicePayload.set(data, VOICE_HEADER_SIZE);
+    if (trailer !== null) voicePayload[payloadLen - 1] = trailer;
 
     const p: Packet = {
-      typeFlagged: PacketType.Voice | PacketFlags.Unencrypted,
+      typeFlagged: PacketType.Voice | PacketFlags.Unencrypted | (trailer === null ? 0 : VOICE_TRAILER_FLAG),
       id: pID,
       clientID: this.#clientID,
       generationID: pGen,
@@ -184,7 +198,9 @@ export class PacketHandler {
       this.#generationCounter[PacketType.VoiceWhisper] = (pGen + 1) >>> 0;
     }
 
-    const payloadLen = WHISPER_HEADER_SIZE + targetClientIds.length * 2 + data.length;
+    const trailer = this.#voiceTrailer.next();
+    const audioOffset = WHISPER_HEADER_SIZE + targetClientIds.length * 2;
+    const payloadLen = audioOffset + data.length + (trailer === null ? 0 : 1);
     const whisperPayload = new Uint8Array(payloadLen);
     const view = new DataView(whisperPayload.buffer);
     view.setUint16(0, pID, false);
@@ -194,12 +210,14 @@ export class PacketHandler {
     for (let index = 0; index < targetClientIds.length; index++) {
       view.setUint16(WHISPER_HEADER_SIZE + index * 2, targetClientIds[index]!, false);
     }
-    whisperPayload.set(data, WHISPER_HEADER_SIZE + targetClientIds.length * 2);
+    whisperPayload.set(data, audioOffset);
+    if (trailer !== null) whisperPayload[payloadLen - 1] = trailer;
 
     const packet: Packet = {
       // 0x20 is the whisper flag on voice packets (same bit as NewProtocol on
       // commands); the official client always sets it on outgoing whispers.
-      typeFlagged: PacketType.VoiceWhisper | PacketFlags.NewProtocol | PacketFlags.Unencrypted,
+      typeFlagged: PacketType.VoiceWhisper | PacketFlags.NewProtocol | PacketFlags.Unencrypted
+        | (trailer === null ? 0 : VOICE_TRAILER_FLAG),
       id: pID,
       clientID: this.#clientID,
       generationID: pGen,
@@ -324,6 +342,10 @@ export class PacketHandler {
     p.data = decrypted.plaintext;
 
     const pType = packetType(p);
+
+    if (pType === PacketType.Pong) {
+      this.#recordPong(p);
+    }
 
     if (pType === PacketType.Ping) {
       this.#sendPong(p.id, decrypted.dummyUsed);
@@ -451,6 +473,16 @@ export class PacketHandler {
     const pongData = new Uint8Array(2);
     new DataView(pongData.buffer).setUint16(0, pID, false);
     this.#sendPacketRaw(PacketType.Pong, pongData, PacketFlags.Unencrypted, dummyUsed);
+  }
+
+  /** The pong payload echoes the ping id; the delta feeds the trailer stats. */
+  #recordPong(p: Packet): void {
+    if (p.data.length < 2) return;
+    const pingId = new DataView(p.data.buffer, p.data.byteOffset, p.data.byteLength).getUint16(0, false);
+    const sentAt = this.#pendingPings.get(pingId);
+    if (sentAt === undefined) return;
+    this.#pendingPings.delete(pingId);
+    this.#rttStats.add(Date.now() - sentAt);
   }
 
   #handlePacketQueue(p: Packet): void {

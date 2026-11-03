@@ -50,13 +50,15 @@ describe("voice packet trailer and flags", () => {
     vi.useRealTimers();
   });
 
-  it("sets the whisper flag (0x20) on outgoing whispers", () => {
+  it("does not set the group-whisper flag (0x20) on direct whisper targets", () => {
     const { handler, socket } = createHandler(false);
     handler.sendWhisperPacket(new Uint8Array([9, 8]), [7, 8], 4);
     const datagram = socket.sent.at(-1)!;
 
     expect(typeFlagged(datagram) & 0x0f).toBe(PacketType.VoiceWhisper);
-    expect(typeFlagged(datagram) & PacketFlags.NewProtocol).toBe(PacketFlags.NewProtocol);
+    // 0x20 selects the group-whisper layout on voice packets; direct targets
+    // must keep it clear or the server parses the target list as a group id.
+    expect(typeFlagged(datagram) & PacketFlags.NewProtocol).toBe(0);
     expect(typeFlagged(datagram) & PacketFlags.Unencrypted).toBe(PacketFlags.Unencrypted);
     // No RTT sample yet: no trailer byte, payload layout unchanged.
     expect(typeFlagged(datagram) & 0x40).toBe(0);

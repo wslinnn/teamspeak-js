@@ -214,9 +214,12 @@ export class PacketHandler {
     if (trailer !== null) whisperPayload[payloadLen - 1] = trailer;
 
     const packet: Packet = {
-      // 0x20 is the whisper flag on voice packets (same bit as NewProtocol on
-      // commands); the official client always sets it on outgoing whispers.
-      typeFlagged: PacketType.VoiceWhisper | PacketFlags.NewProtocol | PacketFlags.Unencrypted
+      // Direct client/channel targets must NOT set 0x20 (NewProtocol): on a
+      // voice whisper that bit selects the group-whisper layout
+      // ([TY][TA][U u64][Data]) instead of the target list, so setting it
+      // makes the server parse [N][M][targets] as a group target and drop the
+      // packet. Group whispers are not sent by this SDK.
+      typeFlagged: PacketType.VoiceWhisper | PacketFlags.Unencrypted
         | (trailer === null ? 0 : VOICE_TRAILER_FLAG),
       id: pID,
       clientID: this.#clientID,

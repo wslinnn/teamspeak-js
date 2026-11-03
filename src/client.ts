@@ -459,7 +459,7 @@ export class Client {
     }
 
     if ((pType === 0 /* Voice */ || pType === 1) /* VoiceWhisper */ && p.data.length > 5) {
-      this.#handleVoicePacket(p.data);
+      this.#handleVoicePacket(p.data, p.typeFlagged);
       return;
     }
 
@@ -471,18 +471,28 @@ export class Client {
   /**
    * Parse an incoming S2C voice packet.
    * Format: [VId: u16] [CId: u16] [Codec: u8] [Data: var]
+   * Optional bytes (signalled by the high-nibble flags) stay inside `data`:
+   * 0x10 prefixes one extension byte, 0x40 appends one trailer byte.
    */
-  #handleVoicePacket(payload: Uint8Array): void {
+  #handleVoicePacket(payload: Uint8Array, typeFlagged: number): void {
     if (this.#voiceDataHandlers.length === 0) return;
 
     const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    const vid = view.getUint16(0, false);
     const clientId = view.getUint16(2, false);
     if (clientId === this.clid) return;
 
     const codec = payload[4]!;
     const data = payload.subarray(5);
 
-    const voiceData: import("./types.js").VoiceData = { clientId, codec, data };
+    const voiceData: import("./types.js").VoiceData = {
+      clientId,
+      codec,
+      data,
+      vid,
+      flags: typeFlagged & 0xf0,
+      isWhisper: (typeFlagged & 0x0f) === 1,
+    };
     for (const h of this.#voiceDataHandlers) setImmediate(() => h(voiceData));
   }
 

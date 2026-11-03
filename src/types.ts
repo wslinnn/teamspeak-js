@@ -102,6 +102,14 @@ export interface VoiceData {
   clientId: number;
   codec: number;
   data: Uint8Array;
+  /** S2C voice sequence of the sender (VId); receiver-side only. */
+  vid: number;
+  /** High-nibble flags of the packet type byte. On voice/whisper packets:
+   *  0x10 = extension byte present, 0x20 = whisper, 0x40 = trailer present,
+   *  0x80 = unencrypted (same bits, different meaning than on commands). */
+  flags: number;
+  /** True when the packet arrived as VoiceWhisper (type 1). */
+  isWhisper: boolean;
 }
 
 /** A server notification that is not yet modeled by the high-level SDK. */

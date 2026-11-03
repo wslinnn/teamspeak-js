@@ -197,7 +197,9 @@ export class PacketHandler {
     whisperPayload.set(data, WHISPER_HEADER_SIZE + targetClientIds.length * 2);
 
     const packet: Packet = {
-      typeFlagged: PacketType.VoiceWhisper | PacketFlags.Unencrypted,
+      // 0x20 is the whisper flag on voice packets (same bit as NewProtocol on
+      // commands); the official client always sets it on outgoing whispers.
+      typeFlagged: PacketType.VoiceWhisper | PacketFlags.NewProtocol | PacketFlags.Unencrypted,
       id: pID,
       clientID: this.#clientID,
       generationID: pGen,
